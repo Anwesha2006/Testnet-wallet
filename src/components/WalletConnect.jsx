@@ -25,11 +25,19 @@ function WalletConnect({
               {publicKey ? truncatePublicKey(publicKey) : "Not connected"}
             </p>
           </div>
+          <p className="mt-1 text-sm font-medium text-slate-600">
+            Status: {publicKey ? "Connected" : "Not Connected"}
+          </p>
           <p className="mt-1 text-sm text-slate-500">
             {installed
               ? "Freighter detected. Network: Testnet."
               : "Freighter extension not detected."}
           </p>
+          {publicKey ? (
+            <p className="mt-3 break-all rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-700">
+              {publicKey}
+            </p>
+          ) : null}
         </div>
 
         {publicKey ? (

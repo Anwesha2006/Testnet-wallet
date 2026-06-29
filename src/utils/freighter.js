@@ -1,7 +1,7 @@
 import {
   getAddress,
   getNetwork,
-  getPublicKey,
+  isAllowed,
   isConnected,
   requestAccess,
   signTransaction,
@@ -59,8 +59,17 @@ export async function connectWallet() {
 }
 
 export async function getConnectedPublicKey() {
-  const publicKeyResponse =
-    typeof getPublicKey === "function" ? await getPublicKey() : await getAddress();
+  const allowedResponse = await isAllowed();
+
+  if (allowedResponse?.error) {
+    throw new Error(getFreighterErrorMessage(allowedResponse.error));
+  }
+
+  if (!allowedResponse?.isAllowed) {
+    return "";
+  }
+
+  const publicKeyResponse = await getAddress();
 
   if (publicKeyResponse?.error) {
     throw new Error(getFreighterErrorMessage(publicKeyResponse.error));
@@ -69,8 +78,10 @@ export async function getConnectedPublicKey() {
   return publicKeyResponse?.publicKey || publicKeyResponse?.address || "";
 }
 
-export function disconnectWallet() {
-  return null;
+export async function disconnectWallet() {
+  // Freighter does not expose a dapp-level logout API. The app clears local state
+  // and suppresses auto-reconnect for this browser session in useStellarWallet.
+  return;
 }
 
 export async function signPaymentTransaction(xdr, publicKey) {
@@ -103,5 +114,20 @@ function getFreighterErrorMessage(error) {
     return error;
   }
 
-  return error?.message || "Freighter rejected the request.";
+  const message = error?.message || "";
+  const normalizedMessage = message.toLowerCase();
+
+  if (normalizedMessage.includes("user declined")) {
+    return "Connection request was rejected in Freighter.";
+  }
+
+  if (normalizedMessage.includes("locked")) {
+    return "Freighter is locked. Unlock it and try again.";
+  }
+
+  if (normalizedMessage.includes("not connected")) {
+    return "Freighter is not connected. Open the extension and try again.";
+  }
+
+  return message || "Freighter rejected the request.";
 }

@@ -1,5 +1,9 @@
 import { useState } from "react";
-import { STELLAR_EXPERT_TESTNET_TX_URL } from "../utils/stellar";
+import {
+  STELLAR_EXPERT_TESTNET_TX_URL,
+  validateAmount,
+  validatePublicKey,
+} from "../utils/stellar";
 
 const initialForm = {
   destination: "",
@@ -21,11 +25,16 @@ function SendTransaction({ publicKey, onSend, sending }) {
     setFeedback(null);
 
     try {
+      validatePublicKey(form.destination, "Destination address");
+      validateAmount(form.amount);
+
       const result = await onSend(form);
       setFeedback({
         type: "success",
         hash: result.hash,
-        message: "Transaction Successful!",
+        amount: result.amount,
+        destination: result.destination,
+        message: "Transaction successful.",
       });
       setForm(initialForm);
     } catch (error) {
@@ -112,6 +121,18 @@ function SendTransaction({ publicKey, onSend, sending }) {
           }`}
         >
           <p className="font-semibold">{feedback.message}</p>
+          {feedback.type === "success" ? (
+            <dl className="mt-3 grid gap-2">
+              <div>
+                <dt className="font-semibold">Amount sent</dt>
+                <dd>{feedback.amount} XLM</dd>
+              </div>
+              <div>
+                <dt className="font-semibold">Recipient</dt>
+                <dd className="break-all">{feedback.destination}</dd>
+              </div>
+            </dl>
+          ) : null}
           {feedback.hash ? (
             <a
               className="mt-2 block break-all underline underline-offset-4"

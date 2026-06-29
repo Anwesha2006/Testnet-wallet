@@ -1,145 +1,32 @@
-import { useCallback, useEffect, useState } from "react";
 import BalanceDisplay from "./components/BalanceDisplay";
 import SendTransaction from "./components/SendTransaction";
 import WalletConnect from "./components/WalletConnect";
-import {
-  buildPaymentTransaction,
-  fundWithFriendbot,
-  loadNativeBalance,
-  submitSignedTransaction,
-} from "./utils/stellar";
-import {
-  checkFreighterInstalled,
-  connectWallet,
-  disconnectWallet,
-  getConnectedPublicKey,
-  signPaymentTransaction,
-} from "./utils/freighter";
+import { useStellarWallet } from "./hooks/useStellarWallet";
+import { truncatePublicKey } from "./utils/freighter";
 
 function App() {
-  const [publicKey, setPublicKey] = useState("");
-  const [freighterInstalled, setFreighterInstalled] = useState(false);
-  const [walletLoading, setWalletLoading] = useState(true);
-  const [walletError, setWalletError] = useState("");
-  const [balance, setBalance] = useState(null);
-  const [balanceLoading, setBalanceLoading] = useState(false);
-  const [balanceError, setBalanceError] = useState("");
-  const [funding, setFunding] = useState(false);
-  const [sending, setSending] = useState(false);
-
-  const refreshBalance = useCallback(async () => {
-    if (!publicKey) {
-      return;
-    }
-
-    setBalanceLoading(true);
-    setBalanceError("");
-
-    try {
-      const nativeBalance = await loadNativeBalance(publicKey);
-      setBalance(nativeBalance);
-    } catch (error) {
-      setBalance(null);
-      setBalanceError(error.message);
-    } finally {
-      setBalanceLoading(false);
-    }
-  }, [publicKey]);
-
-  useEffect(() => {
-    const initializeWallet = async () => {
-      setWalletLoading(true);
-      setWalletError("");
-
-      try {
-        const installed = await checkFreighterInstalled();
-        setFreighterInstalled(installed);
-
-        if (installed) {
-          const connectedPublicKey = await getConnectedPublicKey();
-          setPublicKey(connectedPublicKey);
-        }
-      } catch (error) {
-        setWalletError(error.message);
-      } finally {
-        setWalletLoading(false);
-      }
-    };
-
-    initializeWallet();
-  }, []);
-
-  useEffect(() => {
-    refreshBalance();
-  }, [refreshBalance]);
-
-  const handleConnect = async () => {
-    setWalletLoading(true);
-    setWalletError("");
-
-    try {
-      const connectedPublicKey = await connectWallet();
-      setPublicKey(connectedPublicKey);
-    } catch (error) {
-      setWalletError(error.message);
-    } finally {
-      setWalletLoading(false);
-    }
-  };
-
-  const handleDisconnect = () => {
-    disconnectWallet();
-    setPublicKey("");
-    setBalance(null);
-    setBalanceError("");
-    setWalletError("");
-  };
-
-  const handleFund = async () => {
-    if (!publicKey) {
-      return;
-    }
-
-    setFunding(true);
-    setBalanceError("");
-
-    try {
-      await fundWithFriendbot(publicKey);
-      await refreshBalance();
-    } catch (error) {
-      setBalanceError(error.message);
-    } finally {
-      setFunding(false);
-    }
-  };
-
-  const handleSend = async ({ destination, amount, memo }) => {
-    if (!publicKey) {
-      throw new Error("Connect a wallet before sending XLM.");
-    }
-
-    setSending(true);
-
-    try {
-      const transaction = await buildPaymentTransaction({
-        sourcePublicKey: publicKey,
-        destination,
-        amount,
-        memo,
-      });
-      const signedXdr = await signPaymentTransaction(transaction.toXDR(), publicKey);
-      const result = await submitSignedTransaction(signedXdr);
-      await refreshBalance();
-      return result;
-    } finally {
-      setSending(false);
-    }
-  };
+  const wallet = useStellarWallet();
+  const {
+    publicKey,
+    freighterInstalled,
+    walletLoading,
+    walletError,
+    balance,
+    balanceLoading,
+    balanceError,
+    funding,
+    sending,
+    connect,
+    disconnect,
+    fund,
+    refreshBalance,
+    sendPayment,
+  } = wallet;
 
   return (
     <div className="min-h-screen text-slate-900">
       <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 backdrop-blur">
-        <div className="mx-auto flex max-w-5xl flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+        <div className="mx-auto flex max-w-5xl flex-col gap-4 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <div>
             <p className="text-sm font-semibold uppercase tracking-wide text-indigo-600">
               Stellar Testnet
@@ -148,8 +35,39 @@ function App() {
               Wallet Balance Checker
             </h1>
           </div>
-          <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700">
-            {publicKey ? `${publicKey.slice(0, 6)}...${publicKey.slice(-4)}` : "No wallet"}
+          <div className="flex flex-col gap-2 sm:items-end">
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <span
+                className={`h-2.5 w-2.5 rounded-full ${
+                  publicKey ? "bg-emerald-500" : "bg-slate-300"
+                }`}
+              />
+              <span className="font-semibold text-slate-700">
+                {publicKey ? "Connected" : "Not Connected"}
+              </span>
+              <span className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 font-medium text-slate-700">
+                {publicKey ? truncatePublicKey(publicKey) : "No wallet"}
+              </span>
+            </div>
+            {publicKey ? (
+              <button
+                type="button"
+                onClick={disconnect}
+                disabled={walletLoading}
+                className="inline-flex min-h-10 items-center justify-center rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {walletLoading ? "Disconnecting..." : "Disconnect"}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={connect}
+                disabled={walletLoading || !freighterInstalled}
+                className="inline-flex min-h-10 items-center justify-center rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+              >
+                {walletLoading ? "Connecting..." : "Connect Wallet"}
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -161,8 +79,8 @@ function App() {
             installed={freighterInstalled}
             loading={walletLoading}
             error={walletError}
-            onConnect={handleConnect}
-            onDisconnect={handleDisconnect}
+            onConnect={connect}
+            onDisconnect={disconnect}
           />
           <BalanceDisplay
             publicKey={publicKey}
@@ -171,11 +89,11 @@ function App() {
             funding={funding}
             error={balanceError}
             onRefresh={refreshBalance}
-            onFund={handleFund}
+            onFund={fund}
           />
         </div>
 
-        <SendTransaction publicKey={publicKey} onSend={handleSend} sending={sending} />
+        <SendTransaction publicKey={publicKey} onSend={sendPayment} sending={sending} />
       </main>
     </div>
   );
